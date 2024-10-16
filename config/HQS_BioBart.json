@@ -1,0 +1,36 @@
+{
+  "dataset": "HQS",
+  "task": "HQS",
+  "model_type": "baseline",
+
+  "data_dir": "dataset/HQS/",
+
+  "log_dir": "./log/hqs/biobart/",
+  "monitor": "val_loss",
+  "save_top_k": 1,
+  "mode": "min",
+  "ckpt_filename": "_{epoch:02d}-{val_loss:.4f}",
+
+  "load_v_num": 0,
+
+  "train_batch_size": 4,
+  "eval_batch_size": 4,
+  "num_workers": 4,
+  "seed": 42,
+  "gpus": 1,
+
+  "model_name": "biobart-large",
+  "model_path": "",
+
+  "max_epochs": 10,
+  "learning_rate": 1e-5,
+  "accumulate_grad_batches": 2,
+  "warm_factor": 0,
+  "warm_steps": 0,
+  "weight_decay": 0.01,
+  "patience":5,
+
+  "max_input_length": 512,
+  "max_output_length": 84
+
+}
