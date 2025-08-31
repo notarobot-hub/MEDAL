@@ -1,0 +1,39 @@
+{
+  "dataset": "TyDiQA",
+  "task": "QuestionAnswering",
+  "model_type": "llama2_7b",
+  "corr_model_name": "",
+  "corr_model_type": "",
+
+  "data_dir": "dataset/TyDiQA/",
+  "test_fp": "",
+
+  "generate_factuality_label": true,
+
+  "log_dir": "./log/tydiqa/llama2_7b/",
+  "monitor": "val_loss",
+  "save_top_k": 1,
+  "mode": "min",
+  "patience": 3,
+  "ckpt_filename": "_{epoch:02d}-{val_loss:.4f}",
+
+  "load_v_num": 0,
+
+  "train_batch_size": 2,
+  "eval_batch_size": 2,
+  "num_workers": 4,
+  "seed": 42,
+  "gpus": 1,
+
+  "model_name": "llama2_7b",
+  "model_path": "meta-llama/Llama-2-7b-hf",
+
+  "max_epochs": 5,
+  "learning_rate": 5e-5,
+  "warm_factor": 0,
+  "warm_steps": 0,
+  "weight_decay": 0.01,
+
+  "max_input_length": 2048,
+  "max_output_length": 128
+}

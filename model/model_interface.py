@@ -242,3 +242,119 @@ class CorrInterface(pl.LightningModule):
             # print(pred)
             predictions.extend(pred)
         write_corr_pred_data(self.args, predictions)
+
+class CausalLMInterface(pl.LightningModule):
+    def __init__(self, args, tokenizer, task_model):
+        super().__init__()
+        self.args = args
+        self.tokenizer = tokenizer
+        self.model = task_model
+        self.text_path = os.path.join(args.data_dir)
+
+    def setup(self, stage=None) -> None:
+        if stage == 'fit':
+            num_gpus = self.trainer.gpus if self.trainer.gpus is not None else 0
+            self.total_step = int(
+                self.trainer.max_epochs * self.num_data / (max(1, num_gpus) * self.trainer.accumulate_grad_batches))
+            print('Total training step:', self.total_step)
+
+    def configure_optimizers(self):
+        no_decay = ["bias", "LayerNorm.weight"]
+        params = [
+            {
+                "params": [p for n, p in self.model.named_parameters() if not any(nd in n for nd in no_decay)],
+                "weight_decay": self.args.weight_decay,
+            },
+            {
+                "params": [p for n, p in self.model.named_parameters() if any(nd in n for nd in no_decay)],
+                "weight_decay": 0.0,
+            },
+        ]
+
+        optimizer = torch.optim.AdamW(params, lr=self.args.learning_rate)
+        return [{
+            'optimizer': optimizer,
+        }]
+
+    def _step(self, batch):
+        # For causal LM, we need to shift the input and labels
+        input_ids = batch["source_ids"]
+        labels = batch["target_ids"]
+        
+        # Combine input and target for causal LM training
+        combined_ids = torch.cat([input_ids, labels], dim=1)
+        
+        # Create attention mask for the combined sequence
+        attention_mask = torch.ones_like(combined_ids)
+        
+        # Create labels with -100 for input tokens (to ignore in loss computation)
+        labels_combined = torch.cat([
+            torch.full_like(input_ids, -100),
+            labels
+        ], dim=1)
+        
+        outputs = self.model(
+            input_ids=combined_ids,
+            attention_mask=attention_mask,
+            labels=labels_combined,
+        )
+        
+        if torch.isnan(outputs.loss).any():
+            print('NaN loss detected')
+            print('Input shape:', input_ids.shape)
+            print('Labels shape:', labels.shape)
+
+        return outputs.loss
+
+    def training_step(self, batch, batch_idx):
+        loss = self._step(batch)
+        return {"loss": loss}
+
+    def training_epoch_end(self, train_step_outputs):
+        avg_train_loss = torch.stack([x['loss'] for x in train_step_outputs]).mean()
+        print(avg_train_loss)
+        self.log("train_loss", avg_train_loss, prog_bar=True)
+
+    def validation_step(self, batch, batch_idx):
+        loss = self._step(batch)
+        return {"loss": loss}
+
+    def validation_epoch_end(self, val_step_outputs):
+        avg_val_loss = torch.stack([x["loss"] for x in val_step_outputs]).mean()
+        print(avg_val_loss)
+        self.log("val_loss", avg_val_loss, prog_bar=True)
+
+    def test_step(self, batch, batch_idx):
+        input_ids = batch["source_ids"]
+        attention_mask = batch["source_mask"]
+        
+        # Generate answer using the causal LM
+        with torch.no_grad():
+            outputs = self.model.generate(
+                input_ids=input_ids,
+                attention_mask=attention_mask,
+                max_length=input_ids.shape[1] + self.args.max_output_length,
+                do_sample=False,
+                pad_token_id=self.tokenizer.eos_token_id,
+                eos_token_id=self.tokenizer.eos_token_id,
+                repetition_penalty=1.1,
+                temperature=0.7,
+                num_beams=1
+            )
+        
+        # Extract only the generated part (remove input)
+        generated_ids = outputs[:, input_ids.shape[1]:]
+        
+        # Decode the generated tokens
+        predictions = self.tokenizer.batch_decode(
+            generated_ids, skip_special_tokens=True, clean_up_tokenization_spaces=True
+        )
+        
+        return {
+            "predictions": predictions,
+            "input_length": input_ids.shape[1]
+        }
+
+    def test_epoch_end(self, test_step_outputs):
+        predictions = [item for pred in test_step_outputs for item in pred['predictions']]
+        write_pred_data(self.args, self.text_path, predictions)

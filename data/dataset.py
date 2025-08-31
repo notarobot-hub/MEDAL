@@ -256,3 +256,249 @@ class HQSDataset(Dataset):
             "target_mask": target_mask
         }
 
+
+class TyDiQADataset(Dataset):
+    def __init__(self, args, dataset, tokenizer):
+        super().__init__()
+        self.args = args
+        self.dataset = dataset
+        self.tokenizer = tokenizer
+
+    def __len__(self):
+        return len(self.dataset)
+
+    def __getitem__(self, item):
+        return self.encode(self.dataset[item], item)
+
+    def encode(self, data, idx):
+        instruction_text = "Answer the following question based on the given context. If the question cannot be answered from the context, say 'I cannot answer this question based on the given context.'"
+        
+        if self.args.do_train:
+            question = data['question']
+            context = data['context']
+            answer = data['answer']
+            
+            input_text = instruction_text + "\n\nContext: " + context + "\n\nQuestion: " + question
+            input = self.tokenizer(input_text, max_length=self.args.max_input_length, padding="max_length", truncation=True)
+
+            if self.args.generate_factuality_label:
+                # For TyDiQA, we can use answer presence as a factuality indicator
+                if answer and answer.strip():
+                    target_text = "[Yes]\n\n" + answer
+                else:
+                    target_text = "[No]\n\nI cannot answer this question based on the given context."
+            else:
+                target_text = answer if answer else "I cannot answer this question based on the given context."
+
+            with self.tokenizer.as_target_tokenizer():
+                labels = self.tokenizer(target_text, max_length=self.args.max_output_length, padding="max_length", truncation=True)
+
+            return {
+                "source_ids": torch.tensor(input["input_ids"]),
+                "source_mask": torch.tensor(input["attention_mask"]),
+                "target_ids": torch.tensor(labels["input_ids"]),
+                "context": context,
+                "indice": torch.tensor(idx)
+            }
+
+        if self.args.do_test:
+            question = data['question']
+            context = data['context']
+            answer = data.get('answer', '')
+            indice = data.get('id', idx)
+
+            input_text = instruction_text + "\n\nContext: " + context + "\n\nQuestion: " + question
+            input = self.tokenizer(input_text, max_length=self.args.max_input_length, padding="max_length", truncation=True)
+
+            return {
+                "source_ids": torch.tensor(input["input_ids"]),
+                "source_mask": torch.tensor(input["attention_mask"]),
+                "context": context,
+                "target_answer": answer,
+                "indice": torch.tensor(indice)
+            }
+
+
+class TriviaQADataset(Dataset):
+    def __init__(self, args, dataset, tokenizer):
+        super().__init__()
+        self.args = args
+        self.dataset = dataset
+        self.tokenizer = tokenizer
+
+    def __len__(self):
+        return len(self.dataset)
+
+    def __getitem__(self, item):
+        return self.encode(self.dataset[item], item)
+
+    def encode(self, data, idx):
+        instruction_text = "Answer the following trivia question based on the given context. Provide a concise and accurate answer."
+        
+        if self.args.do_train:
+            question = data['question']
+            context = data['context']
+            answer = data['answer']
+            
+            input_text = instruction_text + "\n\nContext: " + context + "\n\nQuestion: " + question
+            input = self.tokenizer(input_text, max_length=self.args.max_input_length, padding="max_length", truncation=True)
+
+            if self.args.generate_factuality_label:
+                # For TriviaQA, we can use answer presence as a factuality indicator
+                if answer and answer.strip():
+                    target_text = "[Yes]\n\n" + answer
+                else:
+                    target_text = "[No]\n\nI cannot answer this question based on the given context."
+            else:
+                target_text = answer if answer else "I cannot answer this question based on the given context."
+
+            with self.tokenizer.as_target_tokenizer():
+                labels = self.tokenizer(target_text, max_length=self.args.max_output_length, padding="max_length", truncation=True)
+
+            return {
+                "source_ids": torch.tensor(input["input_ids"]),
+                "source_mask": torch.tensor(input["attention_mask"]),
+                "target_ids": torch.tensor(labels["input_ids"]),
+                "context": context,
+                "indice": torch.tensor(idx)
+            }
+
+        if self.args.do_test:
+            question = data['question']
+            context = data['context']
+            answer = data.get('answer', '')
+            indice = data.get('id', idx)
+
+            input_text = instruction_text + "\n\nContext: " + context + "\n\nQuestion: " + question
+            input = self.tokenizer(input_text, max_length=self.args.max_input_length, padding="max_length", truncation=True)
+
+            return {
+                "source_ids": torch.tensor(input["input_ids"]),
+                "source_mask": torch.tensor(input["attention_mask"]),
+                "context": context,
+                "target_answer": answer,
+                "indice": torch.tensor(indice)
+            }
+
+
+class TruthfulQADataset(Dataset):
+    def __init__(self, args, dataset, tokenizer):
+        super().__init__()
+        self.args = args
+        self.dataset = dataset
+        self.tokenizer = tokenizer
+
+    def __len__(self):
+        return len(self.dataset)
+
+    def __getitem__(self, item):
+        return self.encode(self.dataset[item], item)
+
+    def encode(self, data, idx):
+        instruction_text = "Answer the following question truthfully. If you're not sure about the answer, say 'I'm not sure about this.'"
+        
+        if self.args.do_train:
+            question = data['question']
+            answer = data['answer']
+            
+            input_text = instruction_text + "\n\nQuestion: " + question
+            input = self.tokenizer(input_text, max_length=self.args.max_input_length, padding="max_length", truncation=True)
+
+            if self.args.generate_factuality_label:
+                # For TruthfulQA, we can use the provided truthfulness label
+                if data.get('label', 1) == 1:  # Assuming 1 means truthful
+                    target_text = "[Yes]\n\n" + answer
+                else:
+                    target_text = "[No]\n\n" + answer
+            else:
+                target_text = answer
+
+            with self.tokenizer.as_target_tokenizer():
+                labels = self.tokenizer(target_text, max_length=self.args.max_output_length, padding="max_length", truncation=True)
+
+            return {
+                "source_ids": torch.tensor(input["input_ids"]),
+                "source_mask": torch.tensor(input["attention_mask"]),
+                "target_ids": torch.tensor(labels["input_ids"]),
+                "question": question,
+                "indice": torch.tensor(idx)
+            }
+
+        if self.args.do_test:
+            question = data['question']
+            answer = data.get('answer', '')
+            indice = data.get('id', idx)
+
+            input_text = instruction_text + "\n\nQuestion: " + question
+            input = self.tokenizer(input_text, max_length=self.args.max_input_length, padding="max_length", truncation=True)
+
+            return {
+                "source_ids": torch.tensor(input["input_ids"]),
+                "source_mask": torch.tensor(input["attention_mask"]),
+                "question": question,
+                "target_answer": answer,
+                "indice": torch.tensor(indice)
+            }
+
+
+class CoQADataset(Dataset):
+    def __init__(self, args, dataset, tokenizer):
+        super().__init__()
+        self.args = args
+        self.dataset = dataset
+        self.tokenizer = tokenizer
+
+    def __len__(self):
+        return len(self.dataset)
+
+    def __getitem__(self, item):
+        return self.encode(self.dataset[item], item)
+
+    def encode(self, data, idx):
+        instruction_text = "Answer the following question based on the given context. If the question cannot be answered from the context, say 'I cannot answer this question based on the given context.'"
+        
+        if self.args.do_train:
+            question = data['question']
+            context = data['context']
+            answer = data['answer']
+            
+            input_text = instruction_text + "\n\nContext: " + context + "\n\nQuestion: " + question
+            input = self.tokenizer(input_text, max_length=self.args.max_input_length, padding="max_length", truncation=True)
+
+            if self.args.generate_factuality_label:
+                # For CoQA, we can use answer presence as a factuality indicator
+                if answer and answer.strip():
+                    target_text = "[Yes]\n\n" + answer
+                else:
+                    target_text = "[No]\n\nI cannot answer this question based on the given context."
+            else:
+                target_text = answer if answer else "I cannot answer this question based on the given context."
+
+            with self.tokenizer.as_target_tokenizer():
+                labels = self.tokenizer(target_text, max_length=self.args.max_output_length, padding="max_length", truncation=True)
+
+            return {
+                "source_ids": torch.tensor(input["input_ids"]),
+                "source_mask": torch.tensor(input["attention_mask"]),
+                "target_ids": torch.tensor(labels["input_ids"]),
+                "context": context,
+                "indice": torch.tensor(idx)
+            }
+
+        if self.args.do_test:
+            question = data['question']
+            context = data['context']
+            answer = data.get('answer', '')
+            indice = data.get('id', idx)
+
+            input_text = instruction_text + "\n\nContext: " + context + "\n\nQuestion: " + question
+            input = self.tokenizer(input_text, max_length=self.args.max_input_length, padding="max_length", truncation=True)
+
+            return {
+                "source_ids": torch.tensor(input["input_ids"]),
+                "source_mask": torch.tensor(input["attention_mask"]),
+                "context": context,
+                "target_answer": answer,
+                "indice": torch.tensor(indice)
+            }
+
